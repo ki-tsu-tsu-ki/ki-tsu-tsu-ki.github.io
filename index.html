@@ -1,7 +1,161 @@
 <!DOCTYPE html>
-<html>
-<body>
-<h1>Hello World</h1>
-<p>I'm hosted with GitHub Pages. test</p>
-</body>
+<!--[if lt IE 7]>      <html class="no-js lt-ie9 lt-ie8 lt-ie7"> <![endif]-->
+<!--[if IE 7]>         <html class="no-js lt-ie9 lt-ie8"> <![endif]-->
+<!--[if IE 8]>         <html class="no-js lt-ie9"> <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js"> <!--<![endif]-->
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <title></title>
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+
+        <!-- Place favicon.ico and apple-touch-icon.png in the root directory -->
+        <link type="image/x-icon" id="favicon" rel="icon" href="favicon.ico">
+        <link rel="stylesheet" href="css/normalize.css">
+        <link rel="stylesheet" href="css/main.css">
+        <script src="js/vendor/modernizr-2.6.2.min.js"></script>
+        <style type="text/css" media="screen">
+            body {
+                overflow: hidden;
+            }
+            .animation1 {
+                position:relative;
+            }
+            .animation2 {
+                position:relative;
+            }
+            .animation1 span {
+                display:inline-block;
+                position:absolute;
+                bottom:0;
+                margin-bottom:-20px;
+                line-height:40px;
+                color:rgba(255,255,255,0.7);
+                font-weight:bold;
+                font-size:30px;
+                margin-right:6px;
+                margin-left:20px;
+                border:20px solid #fff;
+            }
+            .animation2 span {
+                display:inline-block;
+                position:absolute;
+                top:0;
+                margin-top:-25px;
+                margin-left:20px;
+                line-height:40px;
+                color:rgba(255,255,255,0.7);
+                font-weight:bold;
+                font-size:30px;
+                padding:20px;
+                border:25px solid rgba(255,255,255,1);
+                width:60%;
+                height:20px;
+            }
+        </style>    
+    </head>
+    <body>
+    <div id="list"></div>
+        <!--[if lt IE 7]>
+            <p class="browsehappy">You are using an <strong>outdated</strong> browser. Please <a href="http://browsehappy.com/">upgrade your browser</a> to improve your experience.</p>
+        <![endif]-->
+
+        <!-- Add your site or application content here -->
+        <div id="report" style="width:100%;"><div class="animation1"></div></div>
+        <div id="report2" style="width:100%;"><div class="animation2"><span></span></div></div>
+
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+        <script>window.jQuery || document.write('<script src="js/vendor/jquery-1.10.2.min.js"><\/script>')</script>
+        <script src="js/plugins.js"></script>
+        <script src="js/main.js"></script>
+<script type="text/javascript">
+$(window).load(function() {
+img1 = new Array();
+img2 = new Array();
+img1[0] = "DE6262";
+img2[0] = "FFB88C";
+img1[1] = "FFEEEE";
+img2[1] = "DDEFBB";
+img1[2] = "EFEFBB";
+img2[2] = "D4D3DD";
+img1[3] = "c21500";
+img2[3] = "ffc500";
+img1[4] = "215f00";
+img2[4] = "e4e4d9";
+img1[5] = "50C9C3";
+img2[5] = "96DEDA";
+img1[6] = "616161";
+img2[6] = "9bc5c3";
+img1[7] = "ddd6f3";
+img2[7] = "faaca8";
+img1[8] = "5D4157";
+img2[8] = "A8CABA";
+img1[9] = "E6DADA";
+img2[9] = "274046";
+
+
+
+n = Math.floor(Math.random()*img1.length);
+m = Math.floor(Math.random()*img2.length);
+$('.animation1').css({'width':'100%','height': (n+1)*30 +'px','background':'linear-gradient(90deg, #' + img1[n] + ' '+ ((n+1)*10/2) +'%, #' + img2[m] + ' '+ (100-((m+1)*10/2)) +'%)'});
+n = Math.floor(Math.random()*img1.length);
+m = Math.floor(Math.random()*img2.length);
+$('.animation2').css({'width':'100%','height': (m+1)*30 +'px','background':'linear-gradient(90deg, #' + img1[n] + ' '+ ((n+1)*10/2) +'%, #' + img2[m] + ' '+ (100-((m+1)*10/2)) +'%)'});
+n = Math.floor(Math.random()*img1.length);
+m = Math.floor(Math.random()*img2.length);
+$('body').css({'background':'linear-gradient(90deg, #' + img1[n] + ' '+ ((n+1)*10/2) +'%, #' + img2[m] + ' '+ (100-((m+1)*10/2)) +'%)'});
+});
+
+
+
+$(function(){
+                var timer = 0;
+            $('#report').on('click',function(){console.log('test');  changeFavicon(timer);  timer = timer + 1; });
+});
+ 
+
+
+function changeFavicon ( text ) {
+    // 16x16のcanvasを用意
+    var canvas = document.createElement("canvas");
+    canvas.height = 16;
+    canvas.width = 16;
+ 
+    // favicon.icoの読み込み
+    var img = new Image();
+    img.src = 'favicon.ico';
+    img.onload = function() {
+        var c = canvas.getContext('2d');
+ 
+        // 現在のfaviconをcanvasに貼り付け(画像,x,y)
+        c.drawImage(img,0,0);
+ 
+        // font指定(太さ,サイズ,font)
+        c.font ="400 8px serif";
+ 
+        // 色指定
+        c.fillStyle = "#FF0000";
+ 
+        // 表示文字,表示位置(x),表示位置(y)
+        c.fillText( text, 0, 0);
+ 
+        // 生成された新しいfaviconを取得 
+        var f = canvas.toDataURL('image/png');
+ 
+        // 現在のfaviconを削除
+        $('#favicon').remove();
+ 
+        // headに新しいfaviconを入れる
+        var newFav = '<link type="image/x-icon" id="favicon" rel="icon" href="'+ f +'">';
+        $('head').append( newFav );
+    }
+ 
+    // 元のfavicon(下地)
+    
+}
+
+</script>
+
+    </body>
 </html>
