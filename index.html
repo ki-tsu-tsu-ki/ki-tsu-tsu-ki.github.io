@@ -31,22 +31,13 @@
 
             <!-- ログイン後の表示 -->
             <section id="app-section" class="section hidden">
-                <!-- 会議室設定 -->
+                <!-- カレンダー選択 -->
                 <div class="card">
-                    <h2>会議室の設定</h2>
-                    <div class="room-settings">
-                        <div class="form-group">
-                            <label for="room-id-input">会議室カレンダーIDを追加:</label>
-                            <div class="input-group">
-                                <input type="text" id="room-id-input" placeholder="例: meeting-room-1@resource.calendar.google.com">
-                                <input type="text" id="room-name-input" placeholder="会議室名（任意）">
-                                <button id="add-room-btn" class="btn btn-primary">追加</button>
-                            </div>
-                        </div>
-                        <div id="room-list" class="room-list">
-                            <!-- 登録済み会議室がここに表示される -->
-                        </div>
+                    <h2>カレンダーを選択</h2>
+                    <div id="calendar-list-container">
+                        <p class="placeholder-text">カレンダー一覧を読み込み中...</p>
                     </div>
+                    <button id="refresh-calendars-btn" class="btn btn-secondary" style="margin-top: 10px;">カレンダー一覧を更新</button>
                 </div>
 
                 <!-- 日時選択 -->
@@ -73,7 +64,7 @@
                 <div class="card">
                     <h2>空き状況</h2>
                     <div id="availability-results" class="availability-results">
-                        <p class="placeholder-text">日時を選択して「空き状況を確認」をクリックしてください</p>
+                        <p class="placeholder-text">カレンダーを選択して「空き状況を確認」をクリックしてください</p>
                     </div>
                 </div>
             </section>
@@ -83,6 +74,15 @@
                 <div class="modal-content">
                     <h2>API設定</h2>
                     <p>Google Cloud ConsoleでOAuth 2.0クライアントIDを作成し、以下に入力してください。</p>
+                    <ol class="setup-instructions">
+                        <li><a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a>にアクセス</li>
+                        <li>新しいプロジェクトを作成（または既存のプロジェクトを選択）</li>
+                        <li>「APIとサービス」→「ライブラリ」→「Google Calendar API」を有効化</li>
+                        <li>「APIとサービス」→「認証情報」→「認証情報を作成」→「OAuthクライアントID」</li>
+                        <li>アプリケーションの種類: 「ウェブアプリケーション」</li>
+                        <li>承認済みJavaScriptオリジン: <code>https://ki-tsu-tsu-ki.github.io</code> を追加</li>
+                        <li>作成されたクライアントIDを下に入力</li>
+                    </ol>
                     <div class="form-group">
                         <label for="client-id-input">クライアントID:</label>
                         <input type="text" id="client-id-input" placeholder="xxxx.apps.googleusercontent.com">
