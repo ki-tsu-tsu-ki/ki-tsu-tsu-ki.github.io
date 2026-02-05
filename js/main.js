@@ -1,6 +1,6 @@
 /**
  * 会議室空き状況チェッカー
- * Google Calendar APIを使用して会議室の空き状況を確認するアプリ
+ * Google Calendar APIを使用して会議室の空き状況をタイムライン表示するアプリ
  */
 
 (function() {
@@ -13,6 +13,12 @@
         STORAGE_KEYS: {
             CLIENT_ID: 'meetingroom_client_id',
             SELECTED_CALENDARS: 'meetingroom_selected_calendars'
+        },
+        // タイムライン表示設定
+        TIMELINE: {
+            START_HOUR: 8,
+            END_HOUR: 20,
+            SLOT_HEIGHT: 40  // 30分あたりの高さ(px)
         }
     };
 
@@ -22,7 +28,9 @@
         tokenClient: null,
         calendars: [],
         selectedCalendarIds: new Set(),
-        accessToken: null
+        accessToken: null,
+        currentDate: new Date(),
+        events: {}  // カレンダーIDをキーとしたイベントデータ
     };
 
     // DOM要素
@@ -38,13 +46,12 @@
         elements.userName = document.getElementById('user-name');
         elements.signinBtn = document.getElementById('signin-btn');
         elements.signoutBtn = document.getElementById('signout-btn');
-        elements.calendarListContainer = document.getElementById('calendar-list-container');
-        elements.refreshCalendarsBtn = document.getElementById('refresh-calendars-btn');
         elements.dateInput = document.getElementById('date-input');
-        elements.startTime = document.getElementById('start-time');
-        elements.endTime = document.getElementById('end-time');
-        elements.checkAvailabilityBtn = document.getElementById('check-availability-btn');
-        elements.availabilityResults = document.getElementById('availability-results');
+        elements.prevDayBtn = document.getElementById('prev-day-btn');
+        elements.nextDayBtn = document.getElementById('next-day-btn');
+        elements.todayBtn = document.getElementById('today-btn');
+        elements.timelineContainer = document.getElementById('timeline-container');
+        elements.calendarListContainer = document.getElementById('calendar-list-container');
         elements.configModal = document.getElementById('config-modal');
         elements.clientIdInput = document.getElementById('client-id-input');
         elements.saveConfigBtn = document.getElementById('save-config-btn');
@@ -58,14 +65,56 @@
     function initEventListeners() {
         elements.signinBtn.addEventListener('click', handleSignIn);
         elements.signoutBtn.addEventListener('click', handleSignOut);
-        elements.refreshCalendarsBtn.addEventListener('click', fetchCalendarList);
-        elements.checkAvailabilityBtn.addEventListener('click', handleCheckAvailability);
+        elements.dateInput.addEventListener('change', handleDateChange);
+        elements.prevDayBtn.addEventListener('click', () => changeDate(-1));
+        elements.nextDayBtn.addEventListener('click', () => changeDate(1));
+        elements.todayBtn.addEventListener('click', goToToday);
         elements.configBtn.addEventListener('click', showConfigModal);
         elements.saveConfigBtn.addEventListener('click', handleSaveConfig);
         elements.cancelConfigBtn.addEventListener('click', hideConfigModal);
 
         // 日付入力のデフォルト値を今日に設定
-        elements.dateInput.value = new Date().toISOString().split('T')[0];
+        updateDateInput();
+    }
+
+    /**
+     * 日付入力を更新
+     */
+    function updateDateInput() {
+        elements.dateInput.value = formatDateForInput(state.currentDate);
+    }
+
+    /**
+     * 日付をinput[type=date]用にフォーマット
+     */
+    function formatDateForInput(date) {
+        return date.toISOString().split('T')[0];
+    }
+
+    /**
+     * 日付変更ハンドラー
+     */
+    function handleDateChange() {
+        state.currentDate = new Date(elements.dateInput.value + 'T00:00:00');
+        loadEventsAndRender();
+    }
+
+    /**
+     * 日付を変更
+     */
+    function changeDate(days) {
+        state.currentDate.setDate(state.currentDate.getDate() + days);
+        updateDateInput();
+        loadEventsAndRender();
+    }
+
+    /**
+     * 今日に移動
+     */
+    function goToToday() {
+        state.currentDate = new Date();
+        updateDateInput();
+        loadEventsAndRender();
     }
 
     /**
@@ -103,7 +152,6 @@
         }
 
         try {
-            // GAPI クライアントの初期化を待つ
             await new Promise((resolve, reject) => {
                 if (typeof gapi !== 'undefined') {
                     gapi.load('client', resolve);
@@ -114,7 +162,6 @@
                             gapi.load('client', resolve);
                         }
                     }, 100);
-
                     setTimeout(() => {
                         clearInterval(checkGapi);
                         reject(new Error('gapi not loaded'));
@@ -126,7 +173,6 @@
                 discoveryDocs: [CONFIG.DISCOVERY_DOC]
             });
 
-            // Token Client の初期化を待つ
             await new Promise((resolve, reject) => {
                 if (typeof google !== 'undefined' && google.accounts) {
                     resolve();
@@ -137,7 +183,6 @@
                             resolve();
                         }
                     }, 100);
-
                     setTimeout(() => {
                         clearInterval(checkGoogle);
                         reject(new Error('Google Identity Services not loaded'));
@@ -179,9 +224,7 @@
     async function fetchUserInfo() {
         try {
             const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                headers: {
-                    'Authorization': `Bearer ${state.accessToken}`
-                }
+                headers: { 'Authorization': `Bearer ${state.accessToken}` }
             });
             const userInfo = await response.json();
             elements.userName.textContent = userInfo.email || userInfo.name || 'ログイン中';
@@ -203,14 +246,23 @@
             });
 
             state.calendars = response.result.items || [];
+
+            // 保存された選択がない場合、会議室っぽいカレンダーを自動選択
+            if (state.selectedCalendarIds.size === 0) {
+                state.calendars.forEach(cal => {
+                    if (cal.id.includes('resource.calendar.google.com') ||
+                        cal.accessRole === 'freeBusyReader') {
+                        state.selectedCalendarIds.add(cal.id);
+                    }
+                });
+                saveSelectedCalendars();
+            }
+
             renderCalendarList();
+            loadEventsAndRender();
         } catch (error) {
             console.error('カレンダー一覧取得エラー:', error);
-            let errorMessage = 'カレンダー一覧の取得に失敗しました。';
-            if (error.result && error.result.error) {
-                errorMessage += ` (${error.result.error.message})`;
-            }
-            elements.calendarListContainer.innerHTML = `<p class="error-message">${escapeHtml(errorMessage)}</p>`;
+            elements.calendarListContainer.innerHTML = '<p class="error-message">カレンダー一覧の取得に失敗しました</p>';
         }
     }
 
@@ -223,74 +275,183 @@
             return;
         }
 
-        // カレンダーを種類別に分類
-        const primaryCalendar = state.calendars.find(cal => cal.primary);
-        const resourceCalendars = state.calendars.filter(cal =>
-            cal.id.includes('resource.calendar.google.com') ||
-            cal.accessRole === 'freeBusyReader'
-        );
-        const otherCalendars = state.calendars.filter(cal =>
-            !cal.primary &&
-            !cal.id.includes('resource.calendar.google.com') &&
-            cal.accessRole !== 'freeBusyReader'
-        );
-
-        let html = '';
-
-        // マイカレンダー
-        if (primaryCalendar) {
-            html += '<div class="calendar-section">';
-            html += '<h3>マイカレンダー</h3>';
-            html += renderCalendarItem(primaryCalendar);
-            html += '</div>';
-        }
-
-        // 会議室・リソース
-        if (resourceCalendars.length > 0) {
-            html += '<div class="calendar-section">';
-            html += '<h3>会議室・リソース</h3>';
-            html += resourceCalendars.map(cal => renderCalendarItem(cal)).join('');
-            html += '</div>';
-        }
-
-        // その他のカレンダー
-        if (otherCalendars.length > 0) {
-            html += '<div class="calendar-section">';
-            html += '<h3>その他のカレンダー</h3>';
-            html += otherCalendars.map(cal => renderCalendarItem(cal)).join('');
-            html += '</div>';
-        }
-
-        // 全選択/全解除ボタン
-        html = `
+        let html = `
             <div class="calendar-actions">
                 <button class="btn btn-small btn-secondary" onclick="app.selectAll()">全選択</button>
                 <button class="btn btn-small btn-secondary" onclick="app.deselectAll()">全解除</button>
             </div>
-        ` + html;
+        `;
+
+        state.calendars.forEach(cal => {
+            const isChecked = state.selectedCalendarIds.has(cal.id);
+            const colorStyle = cal.backgroundColor ? `border-left: 4px solid ${cal.backgroundColor}` : '';
+
+            html += `
+                <div class="calendar-item" style="${colorStyle}">
+                    <label class="calendar-label">
+                        <input type="checkbox"
+                               value="${escapeHtml(cal.id)}"
+                               ${isChecked ? 'checked' : ''}
+                               onchange="app.toggleCalendar('${escapeHtml(cal.id)}')">
+                        <span class="calendar-name">${escapeHtml(cal.summary || cal.id)}</span>
+                    </label>
+                </div>
+            `;
+        });
 
         elements.calendarListContainer.innerHTML = html;
     }
 
     /**
-     * カレンダーアイテムを描画
+     * イベントを読み込んでタイムラインを描画
      */
-    function renderCalendarItem(calendar) {
-        const isChecked = state.selectedCalendarIds.has(calendar.id);
-        const colorStyle = calendar.backgroundColor ? `border-left: 4px solid ${calendar.backgroundColor}` : '';
+    async function loadEventsAndRender() {
+        const selectedCalendars = state.calendars.filter(cal =>
+            state.selectedCalendarIds.has(cal.id)
+        );
 
-        return `
-            <div class="calendar-item" style="${colorStyle}">
-                <label class="calendar-label">
-                    <input type="checkbox"
-                           value="${escapeHtml(calendar.id)}"
-                           ${isChecked ? 'checked' : ''}
-                           onchange="app.toggleCalendar('${escapeHtml(calendar.id)}')">
-                    <span class="calendar-name">${escapeHtml(calendar.summary || calendar.id)}</span>
-                </label>
-                <span class="calendar-id">${escapeHtml(calendar.id)}</span>
-            </div>
-        `;
+        if (selectedCalendars.length === 0) {
+            elements.timelineContainer.innerHTML = `
+                <div class="no-rooms-message">
+                    <p>表示する会議室が選択されていません</p>
+                    <p>下の「会議室の設定」から会議室を選択してください</p>
+                </div>
+            `;
+            return;
+        }
+
+        elements.timelineContainer.innerHTML = '<p class="placeholder-text">読み込み中...</p>';
+
+        // 日付の開始と終了を計算
+        const dateStr = formatDateForInput(state.currentDate);
+        const timeMin = new Date(`${dateStr}T00:00:00`).toISOString();
+        const timeMax = new Date(`${dateStr}T23:59:59`).toISOString();
+
+        try {
+            // 各カレンダーのイベントを取得
+            const eventPromises = selectedCalendars.map(cal =>
+                gapi.client.calendar.events.list({
+                    calendarId: cal.id,
+                    timeMin: timeMin,
+                    timeMax: timeMax,
+                    singleEvents: true,
+                    orderBy: 'startTime'
+                }).then(response => ({
+                    calendarId: cal.id,
+                    events: response.result.items || []
+                })).catch(error => ({
+                    calendarId: cal.id,
+                    events: [],
+                    error: error
+                }))
+            );
+
+            const results = await Promise.all(eventPromises);
+
+            // イベントデータを保存
+            state.events = {};
+            results.forEach(result => {
+                state.events[result.calendarId] = result.events;
+            });
+
+            renderTimeline(selectedCalendars);
+        } catch (error) {
+            console.error('イベント取得エラー:', error);
+            elements.timelineContainer.innerHTML = '<p class="error-message">イベントの取得に失敗しました</p>';
+        }
+    }
+
+    /**
+     * タイムラインを描画
+     */
+    function renderTimeline(selectedCalendars) {
+        const { START_HOUR, END_HOUR, SLOT_HEIGHT } = CONFIG.TIMELINE;
+        const totalSlots = (END_HOUR - START_HOUR) * 2; // 30分単位
+        const columnCount = selectedCalendars.length + 1; // 時間列 + 会議室列
+
+        let html = `<div class="timeline-grid" style="grid-template-columns: 60px repeat(${selectedCalendars.length}, 1fr);">`;
+
+        // ヘッダー行
+        html += '<div class="timeline-header">';
+        html += '<div class="timeline-header-cell time-column">時間</div>';
+
+        selectedCalendars.forEach(cal => {
+            const color = cal.backgroundColor || '#4285f4';
+            html += `
+                <div class="timeline-header-cell">
+                    <div class="room-header">
+                        <span class="room-color-indicator" style="background: ${color}"></span>
+                        <span class="room-name-text" title="${escapeHtml(cal.summary || cal.id)}">${escapeHtml(cal.summary || cal.id)}</span>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+
+        // 時間行を生成
+        for (let slot = 0; slot < totalSlots; slot++) {
+            const hour = START_HOUR + Math.floor(slot / 2);
+            const minute = (slot % 2) * 30;
+            const isHourStart = minute === 0;
+            const timeLabel = isHourStart ? `${hour}:00` : '';
+
+            html += '<div class="timeline-row">';
+            html += `<div class="timeline-time">${timeLabel}</div>`;
+
+            selectedCalendars.forEach(cal => {
+                const cellClass = isHourStart ? 'timeline-cell hour-start' : 'timeline-cell';
+                html += `<div class="${cellClass}" data-calendar="${escapeHtml(cal.id)}" data-slot="${slot}">`;
+
+                // このスロットに該当するイベントを描画
+                const events = state.events[cal.id] || [];
+                events.forEach(event => {
+                    const eventStart = new Date(event.start.dateTime || event.start.date);
+                    const eventEnd = new Date(event.end.dateTime || event.end.date);
+
+                    // イベントがこのスロットで開始するか確認
+                    const slotStart = new Date(state.currentDate);
+                    slotStart.setHours(hour, minute, 0, 0);
+                    const slotEnd = new Date(slotStart);
+                    slotEnd.setMinutes(slotEnd.getMinutes() + 30);
+
+                    if (eventStart >= slotStart && eventStart < slotEnd) {
+                        // イベントの長さを計算（30分単位）
+                        const durationMinutes = (eventEnd - eventStart) / (1000 * 60);
+                        const durationSlots = Math.ceil(durationMinutes / 30);
+                        const height = durationSlots * SLOT_HEIGHT - 4;
+
+                        const eventTitle = event.summary || '(タイトルなし)';
+                        const timeStr = formatEventTime(eventStart, eventEnd);
+                        const bgColor = cal.backgroundColor || '#ea4335';
+
+                        html += `
+                            <div class="event-block"
+                                 style="height: ${height}px; background: ${bgColor};"
+                                 title="${escapeHtml(eventTitle)}\n${timeStr}">
+                                ${escapeHtml(eventTitle)}
+                            </div>
+                        `;
+                    }
+                });
+
+                html += '</div>';
+            });
+
+            html += '</div>';
+        }
+
+        html += '</div>';
+        elements.timelineContainer.innerHTML = html;
+    }
+
+    /**
+     * イベント時間をフォーマット
+     */
+    function formatEventTime(start, end) {
+        const formatTime = (date) => {
+            return date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+        };
+        return `${formatTime(start)} - ${formatTime(end)}`;
     }
 
     /**
@@ -303,6 +464,7 @@
             state.selectedCalendarIds.add(calendarId);
         }
         saveSelectedCalendars();
+        loadEventsAndRender();
     }
 
     /**
@@ -312,6 +474,7 @@
         state.calendars.forEach(cal => state.selectedCalendarIds.add(cal.id));
         saveSelectedCalendars();
         renderCalendarList();
+        loadEventsAndRender();
     }
 
     /**
@@ -321,6 +484,7 @@
         state.selectedCalendarIds.clear();
         saveSelectedCalendars();
         renderCalendarList();
+        loadEventsAndRender();
     }
 
     /**
@@ -355,6 +519,7 @@
         state.isSignedIn = false;
         state.accessToken = null;
         state.calendars = [];
+        state.events = {};
         updateUI();
     }
 
@@ -371,197 +536,7 @@
             elements.appSection.classList.add('hidden');
             elements.userInfo.classList.add('hidden');
             elements.userName.textContent = '';
-            elements.calendarListContainer.innerHTML = '<p class="placeholder-text">カレンダー一覧を読み込み中...</p>';
         }
-    }
-
-    /**
-     * 空き状況を確認
-     */
-    async function handleCheckAvailability() {
-        const selectedCalendars = state.calendars.filter(cal =>
-            state.selectedCalendarIds.has(cal.id)
-        );
-
-        if (selectedCalendars.length === 0) {
-            alert('先にカレンダーを選択してください。');
-            return;
-        }
-
-        const date = elements.dateInput.value;
-        const startTime = elements.startTime.value;
-        const endTime = elements.endTime.value;
-
-        if (!date || !startTime || !endTime) {
-            alert('日付と時間を入力してください。');
-            return;
-        }
-
-        const timeMin = new Date(`${date}T${startTime}:00`).toISOString();
-        const timeMax = new Date(`${date}T${endTime}:00`).toISOString();
-
-        if (new Date(timeMin) >= new Date(timeMax)) {
-            alert('終了時刻は開始時刻より後にしてください。');
-            return;
-        }
-
-        elements.checkAvailabilityBtn.disabled = true;
-        elements.checkAvailabilityBtn.textContent = '確認中...';
-        elements.availabilityResults.innerHTML = '<p class="placeholder-text">空き状況を確認中...</p>';
-
-        try {
-            const response = await gapi.client.calendar.freebusy.query({
-                timeMin: timeMin,
-                timeMax: timeMax,
-                items: selectedCalendars.map(cal => ({ id: cal.id }))
-            });
-
-            renderAvailabilityResults(response.result, selectedCalendars, timeMin, timeMax);
-        } catch (error) {
-            console.error('空き状況確認エラー:', error);
-            let errorMessage = '空き状況の確認に失敗しました。';
-            if (error.result && error.result.error) {
-                errorMessage += ` (${error.result.error.message})`;
-            }
-            elements.availabilityResults.innerHTML = `<p class="error-message">${escapeHtml(errorMessage)}</p>`;
-        } finally {
-            elements.checkAvailabilityBtn.disabled = false;
-            elements.checkAvailabilityBtn.textContent = '空き状況を確認';
-        }
-    }
-
-    /**
-     * 空き状況結果を描画
-     */
-    function renderAvailabilityResults(result, selectedCalendars, timeMin, timeMax) {
-        const calendarsData = result.calendars;
-        const queryStart = new Date(timeMin);
-        const queryEnd = new Date(timeMax);
-
-        let html = '';
-
-        for (const calendar of selectedCalendars) {
-            const calendarData = calendarsData[calendar.id];
-            const calendarName = calendar.summary || calendar.id;
-            const colorStyle = calendar.backgroundColor ? `border-left-color: ${calendar.backgroundColor}` : '';
-
-            if (!calendarData) {
-                html += `
-                    <div class="room-availability busy" style="${colorStyle}">
-                        <div class="room-availability-header">
-                            <span class="room-availability-name">${escapeHtml(calendarName)}</span>
-                            <span class="status-badge busy">エラー</span>
-                        </div>
-                        <div class="busy-slots">カレンダー情報を取得できませんでした</div>
-                    </div>
-                `;
-                continue;
-            }
-
-            if (calendarData.errors && calendarData.errors.length > 0) {
-                html += `
-                    <div class="room-availability busy" style="${colorStyle}">
-                        <div class="room-availability-header">
-                            <span class="room-availability-name">${escapeHtml(calendarName)}</span>
-                            <span class="status-badge busy">エラー</span>
-                        </div>
-                        <div class="busy-slots">${escapeHtml(calendarData.errors[0].reason)}</div>
-                    </div>
-                `;
-                continue;
-            }
-
-            const busySlots = calendarData.busy || [];
-
-            if (busySlots.length === 0) {
-                html += `
-                    <div class="room-availability available" style="${colorStyle}">
-                        <div class="room-availability-header">
-                            <span class="room-availability-name">${escapeHtml(calendarName)}</span>
-                            <span class="status-badge available">空き</span>
-                        </div>
-                        <div class="busy-slots">指定時間帯は全て空いています</div>
-                    </div>
-                `;
-            } else {
-                const freeSlots = calculateFreeSlots(busySlots, queryStart, queryEnd);
-                const statusClass = freeSlots.length > 0 ? 'partial' : 'busy';
-                const statusText = freeSlots.length > 0 ? '一部空き' : '予約済み';
-
-                html += `
-                    <div class="room-availability ${statusClass}" style="${colorStyle}">
-                        <div class="room-availability-header">
-                            <span class="room-availability-name">${escapeHtml(calendarName)}</span>
-                            <span class="status-badge ${statusClass}">${statusText}</span>
-                        </div>
-                        <div class="busy-slots">
-                            <strong>予約済み:</strong>
-                            ${busySlots.map(slot => `
-                                <div class="busy-slot">
-                                    ${formatTime(new Date(slot.start))} - ${formatTime(new Date(slot.end))}
-                                </div>
-                            `).join('')}
-                            ${freeSlots.length > 0 ? `
-                                <br><strong>空き時間:</strong>
-                                ${freeSlots.map(slot => `
-                                    <div class="busy-slot">
-                                        ${formatTime(slot.start)} - ${formatTime(slot.end)}
-                                    </div>
-                                `).join('')}
-                            ` : ''}
-                        </div>
-                    </div>
-                `;
-            }
-        }
-
-        elements.availabilityResults.innerHTML = html || '<p class="placeholder-text">カレンダーの空き状況を確認できませんでした</p>';
-    }
-
-    /**
-     * 空き時間スロットを計算
-     */
-    function calculateFreeSlots(busySlots, queryStart, queryEnd) {
-        const freeSlots = [];
-        let currentStart = queryStart;
-
-        const sortedBusy = busySlots
-            .map(slot => ({
-                start: new Date(slot.start),
-                end: new Date(slot.end)
-            }))
-            .sort((a, b) => a.start - b.start);
-
-        for (const busy of sortedBusy) {
-            if (currentStart < busy.start) {
-                freeSlots.push({
-                    start: currentStart,
-                    end: busy.start
-                });
-            }
-            if (busy.end > currentStart) {
-                currentStart = busy.end;
-            }
-        }
-
-        if (currentStart < queryEnd) {
-            freeSlots.push({
-                start: currentStart,
-                end: queryEnd
-            });
-        }
-
-        return freeSlots;
-    }
-
-    /**
-     * 時刻をフォーマット
-     */
-    function formatTime(date) {
-        return date.toLocaleTimeString('ja-JP', {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
     }
 
     /**
@@ -590,11 +565,8 @@
 
         localStorage.setItem(CONFIG.STORAGE_KEYS.CLIENT_ID, clientId);
         hideConfigModal();
-
-        // Google API を再初期化
         state.tokenClient = null;
         initGoogleApi();
-
         alert('設定を保存しました。「Googleでログイン」ボタンをクリックしてください。');
     }
 
