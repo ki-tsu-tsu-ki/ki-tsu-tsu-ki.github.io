@@ -11,8 +11,7 @@
         SCOPES: 'https://www.googleapis.com/auth/calendar.readonly',
         DISCOVERY_DOC: 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest',
         STORAGE_KEYS: {
-            CLIENT_ID: 'meetingroom_client_id',
-            SELECTED_CALENDARS: 'meetingroom_selected_calendars'
+            CLIENT_ID: 'meetingroom_client_id'
         },
         // タイムライン表示設定
         TIMELINE: {
@@ -26,11 +25,11 @@
     const state = {
         isSignedIn: false,
         tokenClient: null,
-        calendars: [],
-        selectedCalendarIds: new Set(),
+        allCalendars: [],      // 全カレンダー
+        roomCalendars: [],     // 会議室カレンダー（自動検出）
         accessToken: null,
         currentDate: new Date(),
-        events: {}  // カレンダーIDをキーとしたイベントデータ
+        events: {}
     };
 
     // DOM要素
@@ -51,7 +50,7 @@
         elements.nextDayBtn = document.getElementById('next-day-btn');
         elements.todayBtn = document.getElementById('today-btn');
         elements.timelineContainer = document.getElementById('timeline-container');
-        elements.calendarListContainer = document.getElementById('calendar-list-container');
+        elements.roomInfo = document.getElementById('room-info');
         elements.configModal = document.getElementById('config-modal');
         elements.clientIdInput = document.getElementById('client-id-input');
         elements.saveConfigBtn = document.getElementById('save-config-btn');
@@ -73,7 +72,6 @@
         elements.saveConfigBtn.addEventListener('click', handleSaveConfig);
         elements.cancelConfigBtn.addEventListener('click', hideConfigModal);
 
-        // 日付入力のデフォルト値を今日に設定
         updateDateInput();
     }
 
@@ -125,21 +123,6 @@
         if (savedClientId) {
             elements.clientIdInput.value = savedClientId;
         }
-
-        const savedSelectedCalendars = localStorage.getItem(CONFIG.STORAGE_KEYS.SELECTED_CALENDARS);
-        if (savedSelectedCalendars) {
-            state.selectedCalendarIds = new Set(JSON.parse(savedSelectedCalendars));
-        }
-    }
-
-    /**
-     * 選択したカレンダーを保存
-     */
-    function saveSelectedCalendars() {
-        localStorage.setItem(
-            CONFIG.STORAGE_KEYS.SELECTED_CALENDARS,
-            JSON.stringify([...state.selectedCalendarIds])
-        );
     }
 
     /**
@@ -234,10 +217,11 @@
     }
 
     /**
-     * カレンダー一覧を取得
+     * カレンダー一覧を取得し、会議室を自動検出
      */
     async function fetchCalendarList() {
-        elements.calendarListContainer.innerHTML = '<p class="placeholder-text">カレンダー一覧を読み込み中...</p>';
+        elements.timelineContainer.innerHTML = '<p class="placeholder-text">カレンダー情報を取得中...</p>';
+        elements.roomInfo.innerHTML = '';
 
         try {
             const response = await gapi.client.calendar.calendarList.list({
@@ -245,91 +229,85 @@
                 showDeleted: false
             });
 
-            state.calendars = response.result.items || [];
+            state.allCalendars = response.result.items || [];
 
-            // 保存された選択がない場合、会議室っぽいカレンダーを自動選択
-            if (state.selectedCalendarIds.size === 0) {
-                state.calendars.forEach(cal => {
-                    if (cal.id.includes('resource.calendar.google.com') ||
-                        cal.accessRole === 'freeBusyReader') {
-                        state.selectedCalendarIds.add(cal.id);
-                    }
-                });
-                saveSelectedCalendars();
-            }
+            // 会議室カレンダーを自動検出
+            state.roomCalendars = state.allCalendars.filter(cal => isRoomCalendar(cal));
 
-            renderCalendarList();
+            // 会議室情報を表示
+            renderRoomInfo();
+
+            // イベントを読み込んで表示
             loadEventsAndRender();
         } catch (error) {
             console.error('カレンダー一覧取得エラー:', error);
-            elements.calendarListContainer.innerHTML = '<p class="error-message">カレンダー一覧の取得に失敗しました</p>';
+            elements.timelineContainer.innerHTML = '<p class="error-message">カレンダー一覧の取得に失敗しました</p>';
         }
     }
 
     /**
-     * カレンダー一覧を描画
+     * 会議室カレンダーかどうかを判定
      */
-    function renderCalendarList() {
-        if (state.calendars.length === 0) {
-            elements.calendarListContainer.innerHTML = '<p class="placeholder-text">カレンダーが見つかりませんでした</p>';
+    function isRoomCalendar(calendar) {
+        // Google Workspaceの会議室リソースを検出
+        if (calendar.id.includes('resource.calendar.google.com')) {
+            return true;
+        }
+
+        // freeBusyReader権限のカレンダー（会議室の典型的な権限）
+        if (calendar.accessRole === 'freeBusyReader') {
+            return true;
+        }
+
+        // 名前に「会議室」「MTG」「Room」などが含まれるカレンダー
+        const roomKeywords = ['会議室', '会議', 'meeting', 'room', 'mtg', 'conf', '応接'];
+        const summary = (calendar.summary || '').toLowerCase();
+        if (roomKeywords.some(keyword => summary.includes(keyword.toLowerCase()))) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * 会議室情報を表示
+     */
+    function renderRoomInfo() {
+        if (state.roomCalendars.length === 0) {
+            elements.roomInfo.innerHTML = `
+                <p class="room-info-text">会議室が見つかりませんでした。Googleカレンダーに会議室リソースを追加してください。</p>
+            `;
             return;
         }
 
-        let html = `
-            <div class="calendar-actions">
-                <button class="btn btn-small btn-secondary" onclick="app.selectAll()">全選択</button>
-                <button class="btn btn-small btn-secondary" onclick="app.deselectAll()">全解除</button>
-            </div>
+        const roomNames = state.roomCalendars.map(cal => cal.summary || cal.id).join('、');
+        elements.roomInfo.innerHTML = `
+            <p class="room-info-text">${state.roomCalendars.length}件の会議室を検出: ${escapeHtml(roomNames)}</p>
         `;
-
-        state.calendars.forEach(cal => {
-            const isChecked = state.selectedCalendarIds.has(cal.id);
-            const colorStyle = cal.backgroundColor ? `border-left: 4px solid ${cal.backgroundColor}` : '';
-
-            html += `
-                <div class="calendar-item" style="${colorStyle}">
-                    <label class="calendar-label">
-                        <input type="checkbox"
-                               value="${escapeHtml(cal.id)}"
-                               ${isChecked ? 'checked' : ''}
-                               onchange="app.toggleCalendar('${escapeHtml(cal.id)}')">
-                        <span class="calendar-name">${escapeHtml(cal.summary || cal.id)}</span>
-                    </label>
-                </div>
-            `;
-        });
-
-        elements.calendarListContainer.innerHTML = html;
     }
 
     /**
      * イベントを読み込んでタイムラインを描画
      */
     async function loadEventsAndRender() {
-        const selectedCalendars = state.calendars.filter(cal =>
-            state.selectedCalendarIds.has(cal.id)
-        );
-
-        if (selectedCalendars.length === 0) {
+        if (state.roomCalendars.length === 0) {
             elements.timelineContainer.innerHTML = `
                 <div class="no-rooms-message">
-                    <p>表示する会議室が選択されていません</p>
-                    <p>下の「会議室の設定」から会議室を選択してください</p>
+                    <p>会議室が見つかりませんでした</p>
+                    <p>Googleカレンダーに会議室リソースが登録されているか確認してください</p>
                 </div>
             `;
             return;
         }
 
-        elements.timelineContainer.innerHTML = '<p class="placeholder-text">読み込み中...</p>';
+        elements.timelineContainer.innerHTML = '<p class="placeholder-text">予約状況を読み込み中...</p>';
 
-        // 日付の開始と終了を計算
         const dateStr = formatDateForInput(state.currentDate);
         const timeMin = new Date(`${dateStr}T00:00:00`).toISOString();
         const timeMax = new Date(`${dateStr}T23:59:59`).toISOString();
 
         try {
-            // 各カレンダーのイベントを取得
-            const eventPromises = selectedCalendars.map(cal =>
+            const eventPromises = state.roomCalendars.map(cal =>
                 gapi.client.calendar.events.list({
                     calendarId: cal.id,
                     timeMin: timeMin,
@@ -348,34 +326,32 @@
 
             const results = await Promise.all(eventPromises);
 
-            // イベントデータを保存
             state.events = {};
             results.forEach(result => {
                 state.events[result.calendarId] = result.events;
             });
 
-            renderTimeline(selectedCalendars);
+            renderTimeline();
         } catch (error) {
             console.error('イベント取得エラー:', error);
-            elements.timelineContainer.innerHTML = '<p class="error-message">イベントの取得に失敗しました</p>';
+            elements.timelineContainer.innerHTML = '<p class="error-message">予約情報の取得に失敗しました</p>';
         }
     }
 
     /**
      * タイムラインを描画
      */
-    function renderTimeline(selectedCalendars) {
+    function renderTimeline() {
         const { START_HOUR, END_HOUR, SLOT_HEIGHT } = CONFIG.TIMELINE;
-        const totalSlots = (END_HOUR - START_HOUR) * 2; // 30分単位
-        const columnCount = selectedCalendars.length + 1; // 時間列 + 会議室列
+        const totalSlots = (END_HOUR - START_HOUR) * 2;
 
-        let html = `<div class="timeline-grid" style="grid-template-columns: 60px repeat(${selectedCalendars.length}, 1fr);">`;
+        let html = `<div class="timeline-grid" style="grid-template-columns: 60px repeat(${state.roomCalendars.length}, 1fr);">`;
 
         // ヘッダー行
         html += '<div class="timeline-header">';
         html += '<div class="timeline-header-cell time-column">時間</div>';
 
-        selectedCalendars.forEach(cal => {
+        state.roomCalendars.forEach(cal => {
             const color = cal.backgroundColor || '#4285f4';
             html += `
                 <div class="timeline-header-cell">
@@ -398,29 +374,26 @@
             html += '<div class="timeline-row">';
             html += `<div class="timeline-time">${timeLabel}</div>`;
 
-            selectedCalendars.forEach(cal => {
+            state.roomCalendars.forEach(cal => {
                 const cellClass = isHourStart ? 'timeline-cell hour-start' : 'timeline-cell';
                 html += `<div class="${cellClass}" data-calendar="${escapeHtml(cal.id)}" data-slot="${slot}">`;
 
-                // このスロットに該当するイベントを描画
                 const events = state.events[cal.id] || [];
                 events.forEach(event => {
                     const eventStart = new Date(event.start.dateTime || event.start.date);
                     const eventEnd = new Date(event.end.dateTime || event.end.date);
 
-                    // イベントがこのスロットで開始するか確認
                     const slotStart = new Date(state.currentDate);
                     slotStart.setHours(hour, minute, 0, 0);
                     const slotEnd = new Date(slotStart);
                     slotEnd.setMinutes(slotEnd.getMinutes() + 30);
 
                     if (eventStart >= slotStart && eventStart < slotEnd) {
-                        // イベントの長さを計算（30分単位）
                         const durationMinutes = (eventEnd - eventStart) / (1000 * 60);
                         const durationSlots = Math.ceil(durationMinutes / 30);
                         const height = durationSlots * SLOT_HEIGHT - 4;
 
-                        const eventTitle = event.summary || '(タイトルなし)';
+                        const eventTitle = event.summary || '(予約)';
                         const timeStr = formatEventTime(eventStart, eventEnd);
                         const bgColor = cal.backgroundColor || '#ea4335';
 
@@ -455,39 +428,6 @@
     }
 
     /**
-     * カレンダーの選択を切り替え
-     */
-    function toggleCalendar(calendarId) {
-        if (state.selectedCalendarIds.has(calendarId)) {
-            state.selectedCalendarIds.delete(calendarId);
-        } else {
-            state.selectedCalendarIds.add(calendarId);
-        }
-        saveSelectedCalendars();
-        loadEventsAndRender();
-    }
-
-    /**
-     * 全選択
-     */
-    function selectAll() {
-        state.calendars.forEach(cal => state.selectedCalendarIds.add(cal.id));
-        saveSelectedCalendars();
-        renderCalendarList();
-        loadEventsAndRender();
-    }
-
-    /**
-     * 全解除
-     */
-    function deselectAll() {
-        state.selectedCalendarIds.clear();
-        saveSelectedCalendars();
-        renderCalendarList();
-        loadEventsAndRender();
-    }
-
-    /**
      * サインイン処理
      */
     function handleSignIn() {
@@ -518,7 +458,8 @@
         }
         state.isSignedIn = false;
         state.accessToken = null;
-        state.calendars = [];
+        state.allCalendars = [];
+        state.roomCalendars = [];
         state.events = {};
         updateUI();
     }
@@ -595,13 +536,6 @@
         loadSettings();
         initGoogleApi();
     }
-
-    // グローバルに公開
-    window.app = {
-        toggleCalendar: toggleCalendar,
-        selectAll: selectAll,
-        deselectAll: deselectAll
-    };
 
     // DOMContentLoaded時に初期化
     if (document.readyState === 'loading') {
