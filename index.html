@@ -1,36 +1,110 @@
 <!DOCTYPE html>
-<!--[if lt IE 7]>      <html class="no-js lt-ie9 lt-ie8 lt-ie7"> <![endif]-->
-<!--[if IE 7]>         <html class="no-js lt-ie9 lt-ie8"> <![endif]-->
-<!--[if IE 8]>         <html class="no-js lt-ie9"> <![endif]-->
-<!--[if gt IE 8]><!--> <html class="no-js"> <!--<![endif]-->
-    <head>
-        <meta charset="utf-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
-        <title>kitsutsuki</title>
-        <meta name="description" content="">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link rel="stylesheet" href="css/normalize.css">
-        <link rel="stylesheet" href="css/main.css">
-        <script src="js/vendor/modernizr-2.6.2.min.js"></script>
-    </head>
-    <body>
-        <!--[if lt IE 7]>
-            <p class="browsehappy">You are using an <strong>outdated</strong> browser. Please <a href="http://browsehappy.com/">upgrade your browser</a> to improve your experience.</p>
-        <![endif]-->
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>会議室空き状況チェッカー</title>
+    <meta name="description" content="Googleカレンダーの会議室の空き状況を確認するアプリ">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="css/normalize.css">
+    <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>会議室空き状況チェッカー</h1>
+            <div id="user-info" class="user-info hidden">
+                <span id="user-name"></span>
+                <button id="signout-btn" class="btn btn-secondary">ログアウト</button>
+            </div>
+        </header>
 
-        <p>kitsutsuki.jp</p>
+        <main class="main">
+            <!-- ログイン前の表示 -->
+            <section id="login-section" class="section">
+                <p class="description">Googleカレンダーに登録されている会議室の空き状況を確認できます。</p>
+                <button id="signin-btn" class="btn btn-primary btn-large">
+                    Googleでログイン
+                </button>
+                <p class="note">※ Googleカレンダーへのアクセス許可が必要です</p>
+            </section>
 
-        <script src="//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
-        <script>window.jQuery || document.write('<script src="js/vendor/jquery-1.10.2.min.js"><\/script>')</script>
-        <script src="js/plugins.js"></script>
-        <script src="js/main.js"></script>
-        <script>
-            (function(b,o,i,l,e,r){b.GoogleAnalyticsObject=l;b[l]||(b[l]=
-            function(){(b[l].q=b[l].q||[]).push(arguments)});b[l].l=+new Date;
-            e=o.createElement(i);r=o.getElementsByTagName(i)[0];
-            e.src='//www.google-analytics.com/analytics.js';
-            r.parentNode.insertBefore(e,r)}(window,document,'script','ga'));
-            ga('create','UA-52230-5');ga('send','pageview');
-        </script>
-    </body>
+            <!-- ログイン後の表示 -->
+            <section id="app-section" class="section hidden">
+                <!-- 会議室設定 -->
+                <div class="card">
+                    <h2>会議室の設定</h2>
+                    <div class="room-settings">
+                        <div class="form-group">
+                            <label for="room-id-input">会議室カレンダーIDを追加:</label>
+                            <div class="input-group">
+                                <input type="text" id="room-id-input" placeholder="例: meeting-room-1@resource.calendar.google.com">
+                                <input type="text" id="room-name-input" placeholder="会議室名（任意）">
+                                <button id="add-room-btn" class="btn btn-primary">追加</button>
+                            </div>
+                        </div>
+                        <div id="room-list" class="room-list">
+                            <!-- 登録済み会議室がここに表示される -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 日時選択 -->
+                <div class="card">
+                    <h2>日時を選択</h2>
+                    <div class="datetime-picker">
+                        <div class="form-group">
+                            <label for="date-input">日付:</label>
+                            <input type="date" id="date-input">
+                        </div>
+                        <div class="form-group">
+                            <label for="start-time">開始時刻:</label>
+                            <input type="time" id="start-time" value="09:00">
+                        </div>
+                        <div class="form-group">
+                            <label for="end-time">終了時刻:</label>
+                            <input type="time" id="end-time" value="18:00">
+                        </div>
+                        <button id="check-availability-btn" class="btn btn-primary">空き状況を確認</button>
+                    </div>
+                </div>
+
+                <!-- 空き状況表示 -->
+                <div class="card">
+                    <h2>空き状況</h2>
+                    <div id="availability-results" class="availability-results">
+                        <p class="placeholder-text">日時を選択して「空き状況を確認」をクリックしてください</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 設定モーダル -->
+            <div id="config-modal" class="modal hidden">
+                <div class="modal-content">
+                    <h2>API設定</h2>
+                    <p>Google Cloud ConsoleでOAuth 2.0クライアントIDを作成し、以下に入力してください。</p>
+                    <div class="form-group">
+                        <label for="client-id-input">クライアントID:</label>
+                        <input type="text" id="client-id-input" placeholder="xxxx.apps.googleusercontent.com">
+                    </div>
+                    <div class="button-group">
+                        <button id="save-config-btn" class="btn btn-primary">保存</button>
+                        <button id="cancel-config-btn" class="btn btn-secondary">キャンセル</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <button id="config-btn" class="btn btn-link">API設定</button>
+        </footer>
+    </div>
+
+    <!-- Google Identity Services -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Google API Client -->
+    <script src="https://apis.google.com/js/api.js" async defer></script>
+    <!-- App Script -->
+    <script src="js/main.js"></script>
+</body>
 </html>
