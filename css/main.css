@@ -572,6 +572,185 @@ textarea {
     color: var(--primary-color);
 }
 
+/* Date Navigation */
+.date-navigation {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.date-picker-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.date-input {
+    padding: 8px 12px;
+    font-size: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+/* Timeline */
+.timeline-container {
+    background: var(--card-background);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+    margin-bottom: 20px;
+}
+
+.timeline-grid {
+    display: grid;
+    min-width: 600px;
+}
+
+.timeline-header {
+    display: contents;
+}
+
+.timeline-header-cell {
+    padding: 12px 8px;
+    font-weight: 600;
+    text-align: center;
+    background: var(--background-color);
+    border-bottom: 2px solid var(--border-color);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.timeline-header-cell.time-column {
+    text-align: right;
+    padding-right: 15px;
+    min-width: 60px;
+}
+
+.timeline-row {
+    display: contents;
+}
+
+.timeline-time {
+    padding: 0 15px 0 8px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-align: right;
+    border-right: 1px solid var(--border-color);
+    background: var(--card-background);
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    padding-top: 2px;
+}
+
+.timeline-cell {
+    position: relative;
+    border-bottom: 1px solid #eee;
+    border-right: 1px solid #eee;
+    min-height: 40px;
+    background: var(--card-background);
+}
+
+.timeline-cell:hover {
+    background: #f5f5f5;
+}
+
+.timeline-cell.hour-start {
+    border-top: 1px solid var(--border-color);
+}
+
+/* Event blocks */
+.event-block {
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    background: var(--danger-color);
+    color: white;
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-size: 0.75rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    z-index: 5;
+    cursor: default;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.event-block:hover {
+    z-index: 6;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+.event-block.own-event {
+    background: var(--primary-color);
+}
+
+/* Room column header with color indicator */
+.room-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.room-color-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+
+.room-name-text {
+    font-size: 0.9rem;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Room Settings Details */
+.room-settings-details {
+    background: var(--card-background);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    margin-top: 20px;
+}
+
+.room-settings-details summary {
+    padding: 15px 20px;
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--text-color);
+    user-select: none;
+}
+
+.room-settings-details summary:hover {
+    background: var(--background-color);
+}
+
+.room-settings-details[open] summary {
+    border-bottom: 1px solid var(--border-color);
+}
+
+.calendar-list-container {
+    padding: 20px;
+}
+
+/* No rooms message */
+.no-rooms-message {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+}
+
+.no-rooms-message p {
+    margin-bottom: 15px;
+}
+
 /* Responsive */
 @media (max-width: 600px) {
     .header {
