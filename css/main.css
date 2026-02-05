@@ -595,6 +595,18 @@ textarea {
     border-radius: 4px;
 }
 
+/* Room Info */
+.room-info {
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.room-info-text {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin: 0;
+}
+
 /* Timeline */
 .timeline-container {
     background: var(--card-background);
