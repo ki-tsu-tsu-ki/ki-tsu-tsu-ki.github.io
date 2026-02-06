@@ -147,6 +147,15 @@ textarea {
     padding-top: 20px;
     border-top: 1px solid var(--border-color);
     text-align: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+}
+
+.version-info {
+    font-size: 0.75rem;
+    color: #aaa;
 }
 
 /* User Info */

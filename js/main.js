@@ -8,6 +8,7 @@
 
     // アプリケーション設定
     const CONFIG = {
+        VERSION: '1.0.1',
         SCOPES: 'https://www.googleapis.com/auth/calendar.readonly',
         DISCOVERY_DOC: 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest',
         STORAGE_KEYS: {
@@ -695,6 +696,12 @@
         initEventListeners();
         loadSettings();
         initGoogleApi();
+
+        // バージョン情報を表示
+        const versionEl = document.getElementById('version-info');
+        if (versionEl) {
+            versionEl.textContent = `v${CONFIG.VERSION}`;
+        }
     }
 
     // グローバルに公開
