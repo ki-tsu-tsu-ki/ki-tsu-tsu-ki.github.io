@@ -50,6 +50,7 @@
                             <option value="30" selected>30分</option>
                             <option value="60">60分</option>
                         </select>
+                        <span class="booking-hint">空いている時間帯をクリックで予約</span>
                     </div>
                 </div>
 
@@ -88,6 +89,33 @@
                     <div class="button-group">
                         <button id="save-config-btn" class="btn btn-primary">保存</button>
                         <button id="cancel-config-btn" class="btn btn-secondary">キャンセル</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 予約モーダル -->
+            <div id="booking-modal" class="modal hidden">
+                <div class="modal-content booking-modal-content">
+                    <h2>会議室を予約</h2>
+                    <div class="booking-info">
+                        <p><strong>会議室:</strong> <span id="booking-room-name"></span></p>
+                        <p><strong>日時:</strong> <span id="booking-datetime"></span></p>
+                    </div>
+                    <div class="form-group">
+                        <label for="booking-title">会議タイトル <span class="required">*</span></label>
+                        <input type="text" id="booking-title" placeholder="例: 週次ミーティング">
+                    </div>
+                    <div class="form-group">
+                        <label for="booking-attendees">参加者（メールアドレス、カンマ区切り）</label>
+                        <input type="text" id="booking-attendees" placeholder="例: tanaka@example.com, suzuki@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="booking-description">説明（任意）</label>
+                        <textarea id="booking-description" rows="3" placeholder="会議の目的やアジェンダなど"></textarea>
+                    </div>
+                    <div class="button-group">
+                        <button id="create-booking-btn" class="btn btn-primary">予約を作成</button>
+                        <button id="cancel-booking-btn" class="btn btn-secondary">キャンセル</button>
                     </div>
                 </div>
             </div>

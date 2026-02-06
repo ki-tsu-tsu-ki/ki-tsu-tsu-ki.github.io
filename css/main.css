@@ -480,6 +480,49 @@ textarea {
     margin-bottom: 20px;
 }
 
+/* Booking Modal */
+.booking-modal-content {
+    max-width: 450px;
+}
+
+.booking-info {
+    background: var(--background-color);
+    padding: 12px 15px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+
+.booking-info p {
+    margin: 5px 0;
+    color: var(--text-color);
+}
+
+.booking-info strong {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.form-group textarea {
+    width: 100%;
+    padding: 10px;
+    font-size: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    box-sizing: border-box;
+    font-family: inherit;
+    resize: vertical;
+}
+
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.2);
+}
+
+.required {
+    color: var(--danger-color);
+}
+
 /* Utility Classes */
 .hidden {
     display: none !important;
@@ -643,6 +686,12 @@ textarea {
     border-color: var(--primary-color);
 }
 
+.booking-hint {
+    font-size: 0.8rem;
+    color: var(--primary-color);
+    margin-left: 10px;
+}
+
 /* Timeline */
 .timeline-container {
     background: var(--card-background);
@@ -702,6 +751,7 @@ textarea {
     min-height: 40px;
     background: var(--card-background);
     transition: background-color 0.1s ease;
+    cursor: pointer;
 }
 
 .timeline-cell.hour-start {
@@ -715,6 +765,19 @@ textarea {
 
 .timeline-cell.slot-highlight-start {
     background: rgba(66, 133, 244, 0.25);
+}
+
+/* Available slot indicator */
+.timeline-cell.slot-available {
+    cursor: pointer;
+}
+
+.timeline-cell.slot-available:hover {
+    background: rgba(52, 168, 83, 0.1);
+}
+
+.timeline-cell.has-event {
+    cursor: default;
 }
 
 /* Event blocks */

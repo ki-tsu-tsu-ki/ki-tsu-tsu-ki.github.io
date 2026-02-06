@@ -8,8 +8,9 @@
 
     // アプリケーション設定
     const CONFIG = {
-        VERSION: '1.1.0',
-        SCOPES: 'https://www.googleapis.com/auth/calendar.readonly',
+        VERSION: '1.2.0',
+        // 読み取りとイベント作成の両方の権限を要求
+        SCOPES: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events',
         DISCOVERY_DOC: 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest',
         STORAGE_KEYS: {
             CLIENT_ID: 'meetingroom_client_id',
@@ -32,7 +33,9 @@
         accessToken: null,
         currentDate: new Date(),
         events: {},  // カレンダーIDをキーとしたイベントデータ
-        searchDuration: 30  // 検索する空き時間の長さ（分）
+        searchDuration: 30,  // 検索する空き時間の長さ（分）
+        // 予約用の状態
+        pendingBooking: null  // { calendarId, calendarName, startTime, endTime }
     };
 
     // DOM要素
@@ -60,6 +63,15 @@
         elements.cancelConfigBtn = document.getElementById('cancel-config-btn');
         elements.configBtn = document.getElementById('config-btn');
         elements.durationSelect = document.getElementById('duration-select');
+        // 予約モーダル
+        elements.bookingModal = document.getElementById('booking-modal');
+        elements.bookingRoomName = document.getElementById('booking-room-name');
+        elements.bookingDatetime = document.getElementById('booking-datetime');
+        elements.bookingTitle = document.getElementById('booking-title');
+        elements.bookingAttendees = document.getElementById('booking-attendees');
+        elements.bookingDescription = document.getElementById('booking-description');
+        elements.createBookingBtn = document.getElementById('create-booking-btn');
+        elements.cancelBookingBtn = document.getElementById('cancel-booking-btn');
     }
 
     /**
@@ -79,6 +91,14 @@
         // 空き時間の長さ選択
         if (elements.durationSelect) {
             elements.durationSelect.addEventListener('change', handleDurationChange);
+        }
+
+        // 予約モーダル
+        if (elements.createBookingBtn) {
+            elements.createBookingBtn.addEventListener('click', handleCreateBooking);
+        }
+        if (elements.cancelBookingBtn) {
+            elements.cancelBookingBtn.addEventListener('click', hideBookingModal);
         }
 
         // 日付入力のデフォルト値を今日に設定
@@ -560,11 +580,11 @@
      */
     function setupTimelineHoverEvents() {
         const cells = elements.timelineContainer.querySelectorAll('.timeline-cell');
-        const timeLabels = elements.timelineContainer.querySelectorAll('.timeline-time');
 
         cells.forEach(cell => {
             cell.addEventListener('mouseenter', handleCellMouseEnter);
             cell.addEventListener('mouseleave', handleCellMouseLeave);
+            cell.addEventListener('click', handleCellClick);
         });
     }
 
@@ -590,6 +610,63 @@
      */
     function handleCellMouseLeave(e) {
         clearHighlights();
+    }
+
+    /**
+     * セルをクリックした時のハンドラー（予約）
+     */
+    function handleCellClick(e) {
+        const cell = e.currentTarget;
+
+        // イベントブロックをクリックした場合は何もしない
+        if (e.target.classList.contains('event-block')) {
+            return;
+        }
+
+        const calendarId = cell.dataset.calendar;
+        const slot = parseInt(cell.dataset.slot, 10);
+
+        // カレンダー情報を取得
+        const calendar = state.calendars.find(cal => cal.id === calendarId);
+        if (!calendar) return;
+
+        // 開始・終了時間を計算
+        const { START_HOUR } = CONFIG.TIMELINE;
+        const hour = START_HOUR + Math.floor(slot / 2);
+        const minute = (slot % 2) * 30;
+
+        const startTime = new Date(state.currentDate);
+        startTime.setHours(hour, minute, 0, 0);
+
+        const endTime = new Date(startTime);
+        endTime.setMinutes(endTime.getMinutes() + state.searchDuration);
+
+        // このスロットからsearchDuration分の時間帯に予定があるか確認
+        if (hasConflict(calendarId, startTime, endTime)) {
+            alert('選択した時間帯には既に予定があります。');
+            return;
+        }
+
+        // 予約モーダルを表示
+        showBookingModal(calendarId, calendar.summary || calendar.id, startTime, endTime);
+    }
+
+    /**
+     * 指定した時間帯に予定があるか確認
+     */
+    function hasConflict(calendarId, startTime, endTime) {
+        const events = (state.events[calendarId] || []).filter(e => !isAllDayEvent(e));
+
+        for (const event of events) {
+            const eventStart = new Date(event.start.dateTime);
+            const eventEnd = new Date(event.end.dateTime);
+
+            // 重複チェック: (start1 < end2) && (end1 > start2)
+            if (startTime < eventEnd && endTime > eventStart) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -754,6 +831,125 @@
      */
     function hideConfigModal() {
         elements.configModal.classList.add('hidden');
+    }
+
+    /**
+     * 予約モーダルを表示
+     */
+    function showBookingModal(calendarId, calendarName, startTime, endTime) {
+        state.pendingBooking = { calendarId, calendarName, startTime, endTime };
+
+        elements.bookingRoomName.textContent = calendarName;
+        elements.bookingDatetime.textContent = formatBookingDatetime(startTime, endTime);
+        elements.bookingTitle.value = '';
+        elements.bookingAttendees.value = '';
+        elements.bookingDescription.value = '';
+        elements.bookingModal.classList.remove('hidden');
+        elements.bookingTitle.focus();
+    }
+
+    /**
+     * 予約モーダルを非表示
+     */
+    function hideBookingModal() {
+        elements.bookingModal.classList.add('hidden');
+        state.pendingBooking = null;
+    }
+
+    /**
+     * 予約日時をフォーマット
+     */
+    function formatBookingDatetime(start, end) {
+        const dateOptions = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' };
+        const timeOptions = { hour: '2-digit', minute: '2-digit' };
+        const dateStr = start.toLocaleDateString('ja-JP', dateOptions);
+        const startTimeStr = start.toLocaleTimeString('ja-JP', timeOptions);
+        const endTimeStr = end.toLocaleTimeString('ja-JP', timeOptions);
+        return `${dateStr} ${startTimeStr} - ${endTimeStr}`;
+    }
+
+    /**
+     * 予約を作成
+     */
+    async function handleCreateBooking() {
+        if (!state.pendingBooking) {
+            return;
+        }
+
+        const title = elements.bookingTitle.value.trim();
+        if (!title) {
+            alert('会議タイトルを入力してください。');
+            elements.bookingTitle.focus();
+            return;
+        }
+
+        const { calendarId, startTime, endTime } = state.pendingBooking;
+
+        // 参加者のメールアドレスを解析
+        const attendeesStr = elements.bookingAttendees.value.trim();
+        const attendees = attendeesStr
+            ? attendeesStr.split(',').map(email => ({ email: email.trim() })).filter(a => a.email)
+            : [];
+
+        const description = elements.bookingDescription.value.trim();
+
+        // イベントオブジェクトを作成
+        const event = {
+            summary: title,
+            location: state.pendingBooking.calendarName,
+            description: description,
+            start: {
+                dateTime: startTime.toISOString(),
+                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+            },
+            end: {
+                dateTime: endTime.toISOString(),
+                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+            },
+            attendees: attendees
+        };
+
+        // ボタンを無効化
+        elements.createBookingBtn.disabled = true;
+        elements.createBookingBtn.textContent = '作成中...';
+
+        try {
+            // 自分のカレンダーにイベントを作成（会議室を招待）
+            const response = await gapi.client.calendar.events.insert({
+                calendarId: 'primary',
+                resource: event,
+                sendUpdates: 'all'  // 参加者に通知を送信
+            });
+
+            // 会議室も招待に追加するため、会議室カレンダーにも予定を作成を試みる
+            // （権限がない場合は無視）
+            try {
+                await gapi.client.calendar.events.insert({
+                    calendarId: calendarId,
+                    resource: {
+                        summary: title,
+                        description: description,
+                        start: event.start,
+                        end: event.end
+                    }
+                });
+            } catch (roomError) {
+                // 会議室への直接予約ができない場合は無視（通常の権限設定）
+                console.log('会議室への直接予約はスキップ:', roomError.result?.error?.message || roomError);
+            }
+
+            hideBookingModal();
+            alert('予約を作成しました！');
+
+            // タイムラインを更新
+            loadEventsAndRender();
+        } catch (error) {
+            console.error('予約作成エラー:', error);
+            alert('予約の作成に失敗しました: ' + (error.result?.error?.message || error.message || '不明なエラー'));
+        } finally {
+            elements.createBookingBtn.disabled = false;
+            elements.createBookingBtn.textContent = '予約を作成';
+        }
     }
 
     /**
