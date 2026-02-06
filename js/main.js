@@ -8,7 +8,7 @@
 
     // アプリケーション設定
     const CONFIG = {
-        VERSION: '1.0.1',
+        VERSION: '1.1.0',
         SCOPES: 'https://www.googleapis.com/auth/calendar.readonly',
         DISCOVERY_DOC: 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest',
         STORAGE_KEYS: {
@@ -31,7 +31,8 @@
         selectedCalendarIds: new Set(),
         accessToken: null,
         currentDate: new Date(),
-        events: {}  // カレンダーIDをキーとしたイベントデータ
+        events: {},  // カレンダーIDをキーとしたイベントデータ
+        searchDuration: 30  // 検索する空き時間の長さ（分）
     };
 
     // DOM要素
@@ -58,6 +59,7 @@
         elements.saveConfigBtn = document.getElementById('save-config-btn');
         elements.cancelConfigBtn = document.getElementById('cancel-config-btn');
         elements.configBtn = document.getElementById('config-btn');
+        elements.durationSelect = document.getElementById('duration-select');
     }
 
     /**
@@ -74,8 +76,20 @@
         elements.saveConfigBtn.addEventListener('click', handleSaveConfig);
         elements.cancelConfigBtn.addEventListener('click', hideConfigModal);
 
+        // 空き時間の長さ選択
+        if (elements.durationSelect) {
+            elements.durationSelect.addEventListener('change', handleDurationChange);
+        }
+
         // 日付入力のデフォルト値を今日に設定
         updateDateInput();
+    }
+
+    /**
+     * 検索する空き時間の長さを変更
+     */
+    function handleDurationChange() {
+        state.searchDuration = parseInt(elements.durationSelect.value, 10);
     }
 
     /**
@@ -449,12 +463,19 @@
     }
 
     /**
+     * 終日イベントかどうかを判定
+     */
+    function isAllDayEvent(event) {
+        // dateTimeがなくdateのみの場合は終日イベント
+        return !event.start.dateTime && event.start.date;
+    }
+
+    /**
      * タイムラインを描画
      */
     function renderTimeline(selectedCalendars) {
         const { START_HOUR, END_HOUR, SLOT_HEIGHT } = CONFIG.TIMELINE;
         const totalSlots = (END_HOUR - START_HOUR) * 2; // 30分単位
-        const columnCount = selectedCalendars.length + 1; // 時間列 + 会議室列
 
         let html = `<div class="timeline-grid" style="grid-template-columns: 60px repeat(${selectedCalendars.length}, 1fr);">`;
 
@@ -483,17 +504,17 @@
             const timeLabel = isHourStart ? `${hour}:00` : '';
 
             html += '<div class="timeline-row">';
-            html += `<div class="timeline-time">${timeLabel}</div>`;
+            html += `<div class="timeline-time" data-slot="${slot}">${timeLabel}</div>`;
 
             selectedCalendars.forEach(cal => {
                 const cellClass = isHourStart ? 'timeline-cell hour-start' : 'timeline-cell';
                 html += `<div class="${cellClass}" data-calendar="${escapeHtml(cal.id)}" data-slot="${slot}">`;
 
-                // このスロットに該当するイベントを描画
-                const events = state.events[cal.id] || [];
+                // このスロットに該当するイベントを描画（終日イベントは除外）
+                const events = (state.events[cal.id] || []).filter(e => !isAllDayEvent(e));
                 events.forEach(event => {
-                    const eventStart = new Date(event.start.dateTime || event.start.date);
-                    const eventEnd = new Date(event.end.dateTime || event.end.date);
+                    const eventStart = new Date(event.start.dateTime);
+                    const eventEnd = new Date(event.end.dateTime);
 
                     // イベントがこのスロットで開始するか確認
                     const slotStart = new Date(state.currentDate);
@@ -529,6 +550,86 @@
 
         html += '</div>';
         elements.timelineContainer.innerHTML = html;
+
+        // タイムラインにホバーイベントを設定
+        setupTimelineHoverEvents();
+    }
+
+    /**
+     * タイムラインのホバーイベントを設定
+     */
+    function setupTimelineHoverEvents() {
+        const cells = elements.timelineContainer.querySelectorAll('.timeline-cell');
+        const timeLabels = elements.timelineContainer.querySelectorAll('.timeline-time');
+
+        cells.forEach(cell => {
+            cell.addEventListener('mouseenter', handleCellMouseEnter);
+            cell.addEventListener('mouseleave', handleCellMouseLeave);
+        });
+    }
+
+    /**
+     * セルにマウスが入った時のハンドラー
+     */
+    function handleCellMouseEnter(e) {
+        const cell = e.currentTarget;
+
+        // イベントブロックの上にいる場合はハイライトしない
+        if (e.target.classList.contains('event-block')) {
+            return;
+        }
+
+        const startSlot = parseInt(cell.dataset.slot, 10);
+        const slotsToHighlight = state.searchDuration / 30; // 30分単位
+
+        highlightSlots(startSlot, slotsToHighlight);
+    }
+
+    /**
+     * セルからマウスが出た時のハンドラー
+     */
+    function handleCellMouseLeave(e) {
+        clearHighlights();
+    }
+
+    /**
+     * 指定したスロットから横串でハイライト
+     */
+    function highlightSlots(startSlot, count) {
+        const { START_HOUR, END_HOUR } = CONFIG.TIMELINE;
+        const totalSlots = (END_HOUR - START_HOUR) * 2;
+
+        for (let i = 0; i < count; i++) {
+            const slotIndex = startSlot + i;
+            if (slotIndex >= totalSlots) break;
+
+            const cells = elements.timelineContainer.querySelectorAll(
+                `.timeline-cell[data-slot="${slotIndex}"]`
+            );
+            const timeLabel = elements.timelineContainer.querySelector(
+                `.timeline-time[data-slot="${slotIndex}"]`
+            );
+
+            cells.forEach(cell => {
+                if (i === 0) {
+                    cell.classList.add('slot-highlight-start');
+                } else {
+                    cell.classList.add('slot-highlight');
+                }
+            });
+        }
+    }
+
+    /**
+     * すべてのハイライトをクリア
+     */
+    function clearHighlights() {
+        const highlighted = elements.timelineContainer.querySelectorAll(
+            '.slot-highlight, .slot-highlight-start'
+        );
+        highlighted.forEach(el => {
+            el.classList.remove('slot-highlight', 'slot-highlight-start');
+        });
     }
 
     /**

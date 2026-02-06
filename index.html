@@ -42,7 +42,16 @@
                 </div>
 
                 <!-- 会議室情報 -->
-                <div id="room-info" class="room-info"></div>
+                <div id="room-info" class="room-info">
+                    <div class="duration-selector">
+                        <label>空き時間を探す:</label>
+                        <select id="duration-select">
+                            <option value="15">15分</option>
+                            <option value="30" selected>30分</option>
+                            <option value="60">60分</option>
+                        </select>
+                    </div>
+                </div>
 
                 <!-- タイムライン表示 -->
                 <div id="timeline-container" class="timeline-container">
