@@ -237,7 +237,9 @@
      * カレンダー一覧を取得
      */
     async function fetchCalendarList() {
-        elements.calendarListContainer.innerHTML = '<p class="placeholder-text">カレンダー一覧を読み込み中...</p>';
+        if (elements.calendarListContainer) {
+            elements.calendarListContainer.innerHTML = '<p class="placeholder-text">カレンダー一覧を読み込み中...</p>';
+        }
 
         try {
             // 隠れているカレンダーも含めて取得
@@ -256,19 +258,26 @@
             // 会議室を先頭に、その他を後に並べる
             state.calendars = [...roomCalendars, ...otherCalendars];
 
-            // 保存された選択がない場合、会議室カレンダーを自動選択
-            if (state.selectedCalendarIds.size === 0) {
+            // 保存された選択をフィルタリング（存在しないカレンダーを除去）
+            const validCalendarIds = new Set(state.calendars.map(cal => cal.id));
+            const validSelectedIds = [...state.selectedCalendarIds].filter(id => validCalendarIds.has(id));
+            state.selectedCalendarIds = new Set(validSelectedIds);
+
+            // 選択が空の場合、会議室カレンダーを自動選択
+            if (state.selectedCalendarIds.size === 0 && roomCalendars.length > 0) {
                 roomCalendars.forEach(cal => {
                     state.selectedCalendarIds.add(cal.id);
                 });
-                saveSelectedCalendars();
             }
+            saveSelectedCalendars();
 
             renderCalendarList();
             loadEventsAndRender();
         } catch (error) {
             console.error('カレンダー一覧取得エラー:', error);
-            elements.calendarListContainer.innerHTML = '<p class="error-message">カレンダー一覧の取得に失敗しました</p>';
+            if (elements.calendarListContainer) {
+                elements.calendarListContainer.innerHTML = '<p class="error-message">カレンダー一覧の取得に失敗しました</p>';
+            }
         }
     }
 
@@ -300,6 +309,10 @@
      * カレンダー一覧を描画
      */
     function renderCalendarList() {
+        if (!elements.calendarListContainer) {
+            return;
+        }
+
         if (state.calendars.length === 0) {
             elements.calendarListContainer.innerHTML = '<p class="placeholder-text">カレンダーが見つかりませんでした</p>';
             return;
